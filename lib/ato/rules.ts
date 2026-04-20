@@ -88,7 +88,8 @@ export function classifyTransaction(tx: {
   holding_period_days?: number | null;
   is_initial_allocation?: boolean;
 }): ClassificationResult {
-  const txType = tx.tx_type.toLowerCase();
+  // Convert to lowercase and normalize (replace spaces, hyphens with underscores)
+  const txType = (tx.tx_type || '').toLowerCase().replace(/[\s-]+/g, '_');
   const isSpam = tx.is_spam ?? false;
   const marketValueAUD = tx.market_value_aud ?? 0;
   const acquisitionCostAUD = tx.acquisition_cost_aud ?? 0;
@@ -125,11 +126,14 @@ export function classifyTransaction(tx: {
     case 'add_liquidity':
     case 'lp_deposit':
     case 'lp_add':
+    case 'increase_liquidity':
       return classifyLPDeposit(tx, marketValueAUD, acquisitionCostAUD, holdingPeriodDays);
 
     case 'remove_liquidity':
     case 'lp_withdraw':
     case 'lp_remove':
+    case 'decrease_liquidity':
+    case 'liquidity_withdrawal':
       return classifyLPWithdrawal(tx, marketValueAUD, acquisitionCostAUD);
 
     case 'transfer':
@@ -137,13 +141,60 @@ export function classifyTransaction(tx: {
 
     case 'nft_sale':
     case 'nft_purchase':
-      return classifyNFTSale(tx, marketValueAUD, acquisitionCostAUD, holdingPeriodDays);
+    case 'nft':
+    case 'nft_mint':
+    case 'compressed_nft_mint':
+    case 'compressed_nft_transfer':
+      return classifyNFT(tx, marketValueAUD, acquisitionCostAUD, holdingPeriodDays);
 
     case 'wrap':
     case 'unwrap':
       return classifyWrap(tx, marketValueAUD, acquisitionCostAUD, holdingPeriodDays);
 
+    case 'deposit':
+    case 'deposit_for_burn':
+      return classifyDeposit(tx, marketValueAUD, acquisitionCostAUD, holdingPeriodDays);
+
+    case 'fulfill':
+    case 'settle':
+    case 'trade_settlement':
+      return classifyTrade(tx, marketValueAUD, acquisitionCostAUD, holdingPeriodDays);
+
+    case 'initialize_account':
+    case 'account_setup':
+      return classifyAccountSetup(tx);
+
+    // DeFi Protocol classifications
+    case 'lending_deposit':
+    case 'lending_withdrawal':
+      return classifyLendingTransaction(tx, marketValueAUD, acquisitionCostAUD, holdingPeriodDays);
+
+    case 'liquidity_deposit':
+    case 'liquidity_withdrawal':
+      return classifyLiquidityTransaction(tx, marketValueAUD, acquisitionCostAUD, holdingPeriodDays);
+
+    case 'perpetual_trade':
+    case 'perp_trade':
+    case 'drift_trade':
+      return classifyPerpetualTrade(tx, marketValueAUD, acquisitionCostAUD, holdingPeriodDays);
+
     default:
+      // If we have market values, treat as potential CGT event
+      // This handles types like: DEPOSIT, FULFILL, SETTLE, etc.
+      if (marketValueAUD > 0 || acquisitionCostAUD > 0) {
+        const capitalGain = marketValueAUD - acquisitionCostAUD;
+        return {
+          type: 'CGT_EVENT',
+          subtype: txType || 'disposal',
+          taxableAmountAUD: capitalGain,
+          isCGTDiscountEligible: holdingPeriodDays !== null && holdingPeriodDays > CGT_DISCOUNT_HOLDING_PERIOD_DAYS,
+          holdingPeriodDays,
+          rule: 'ATO — disposal with identifiable value',
+          notes: `Transaction has AUD value. Capital gain: ${formatAUD(capitalGain)}. Market: ${formatAUD(marketValueAUD)}, Cost: ${formatAUD(acquisitionCostAUD)}.`,
+        };
+      }
+
+      // No values available - needs manual review
       return {
         type: 'NEEDS_REVIEW',
         subtype: txType || 'unknown',
@@ -151,7 +202,7 @@ export function classifyTransaction(tx: {
         isCGTDiscountEligible: false,
         holdingPeriodDays: null,
         rule: 'ATO — transaction type requires manual review',
-        notes: `Unknown transaction type "${txType}". Manual classification required.`,
+        notes: `Unknown transaction type "${txType}" with no AUD values. Manual classification required.`,
       };
   }
 }
@@ -292,9 +343,44 @@ function classifyTransfer(tx: any): ClassificationResult {
 }
 
 /**
- * Rule 9: NFT SALE - CGT Event
+ * Rule 9: NFT - CGT Event (mint, purchase, or sale)
  */
-function classifyNFTSale(
+function classifyNFT(
+  tx: any,
+  marketValueAUD: number,
+  acquisitionCostAUD: number,
+  holdingPeriodDays: number | null
+): ClassificationResult {
+  const capitalGain = marketValueAUD - acquisitionCostAUD;
+
+  // NFT mint - typically just paying mint fee, no CGT until disposal
+  if (capitalGain === 0 && acquisitionCostAUD < 1) {
+    return {
+      type: 'NON_TAXABLE',
+      subtype: 'nft_mint',
+      taxableAmountAUD: 0,
+      isCGTDiscountEligible: false,
+      holdingPeriodDays: null,
+      rule: 'ATO — NFT mint establishes cost base',
+      notes: `NFT minted. Cost base = ${formatAUD(acquisitionCostAUD)} (mint fee). No CGT event until NFT is sold.`,
+    };
+  }
+
+  return {
+    type: 'CGT_EVENT',
+    subtype: 'nft_disposal',
+    taxableAmountAUD: capitalGain,
+    isCGTDiscountEligible: holdingPeriodDays !== null && holdingPeriodDays > CGT_DISCOUNT_HOLDING_PERIOD_DAYS,
+    holdingPeriodDays,
+    rule: 'ATO — NFT treated as CGT asset',
+    notes: `NFT transaction is a CGT event. Capital gain: ${formatAUD(capitalGain)}. ${holdingPeriodDays !== null && holdingPeriodDays > CGT_DISCOUNT_HOLDING_PERIOD_DAYS ? '50% CGT discount applies.' : 'No CGT discount.'}`,
+  };
+}
+
+/**
+ * Trade/Fulfill/Settle - CGT Event
+ */
+function classifyTrade(
   tx: any,
   marketValueAUD: number,
   acquisitionCostAUD: number,
@@ -304,12 +390,128 @@ function classifyNFTSale(
 
   return {
     type: 'CGT_EVENT',
-    subtype: 'nft_sale',
+    subtype: 'trade',
     taxableAmountAUD: capitalGain,
     isCGTDiscountEligible: holdingPeriodDays !== null && holdingPeriodDays > CGT_DISCOUNT_HOLDING_PERIOD_DAYS,
     holdingPeriodDays,
-    rule: 'ATO — NFT treated as CGT asset',
-    notes: `NFT sale is a CGT event. Capital gain: ${formatAUD(capitalGain)}. ${holdingPeriodDays !== null && holdingPeriodDays > CGT_DISCOUNT_HOLDING_PERIOD_DAYS ? '50% CGT discount applies.' : 'No CGT discount.'}`,
+    rule: 'ATO — trade execution is a disposal',
+    notes: `Trade executed. Capital gain: ${formatAUD(capitalGain)}. Market: ${formatAUD(marketValueAUD)}, Cost: ${formatAUD(acquisitionCostAUD)}.`,
+  };
+}
+
+/**
+ * Deposit - typically moving assets to protocol (CGT event if change of ownership)
+ */
+function classifyDeposit(
+  tx: any,
+  marketValueAUD: number,
+  acquisitionCostAUD: number,
+  holdingPeriodDays: number | null
+): ClassificationResult {
+  const capitalGain = marketValueAUD - acquisitionCostAUD;
+
+  return {
+    type: 'CGT_EVENT',
+    subtype: 'deposit',
+    taxableAmountAUD: capitalGain,
+    isCGTDiscountEligible: holdingPeriodDays !== null && holdingPeriodDays > CGT_DISCOUNT_HOLDING_PERIOD_DAYS,
+    holdingPeriodDays,
+    rule: 'ATO — deposit to protocol may be disposal',
+    notes: `Deposit transaction. If beneficial ownership changes, CGT applies. Gain: ${formatAUD(capitalGain)}.`,
+  };
+}
+
+/**
+ * Account Setup - non-taxable setup transaction
+ */
+function classifyAccountSetup(tx: any): ClassificationResult {
+  return {
+    type: 'NON_TAXABLE',
+    subtype: 'account_setup',
+    taxableAmountAUD: 0,
+    isCGTDiscountEligible: false,
+    holdingPeriodDays: null,
+    rule: 'ATO — account setup not a disposal',
+    notes: 'Account initialization transaction. No CGT implication - establishes account for future transactions.',
+  };
+}
+
+/**
+ * Lending transactions (Kamino, Drift deposits/withdrawals)
+ * Deposit = CGT event (disposal of underlying asset for receipt of receipt token)
+ * Withdrawal = CGT event (disposal of receipt token for underlying asset)
+ */
+function classifyLendingTransaction(
+  tx: any,
+  marketValueAUD: number,
+  acquisitionCostAUD: number,
+  holdingPeriodDays: number | null
+): ClassificationResult {
+  const capitalGain = marketValueAUD - acquisitionCostAUD;
+  const isDeposit = tx.tx_type.toLowerCase().includes('deposit');
+
+  return {
+    type: 'CGT_EVENT',
+    subtype: isDeposit ? 'lending_deposit' : 'lending_withdrawal',
+    taxableAmountAUD: capitalGain,
+    isCGTDiscountEligible: holdingPeriodDays !== null && holdingPeriodDays > CGT_DISCOUNT_HOLDING_PERIOD_DAYS,
+    holdingPeriodDays,
+    rule: 'ATO DeFi guidance — lending involves change of beneficial ownership',
+    notes: isDeposit
+      ? `Lending deposit is a CGT event. Disposal of underlying asset. Gain: ${formatAUD(capitalGain)}. Receive receipt token (e.g., kUSDC) with cost base = ${formatAUD(marketValueAUD)}.`
+      : `Lending withdrawal is a CGT event. Disposal of receipt token. Gain: ${formatAUD(capitalGain)}.`,
+  };
+}
+
+/**
+ * Liquidity transactions (Meteora DLMM, Kamino Liquidity, Raydium CLMM)
+ * Adding liquidity = CGT event (disposal of underlying tokens for LP tokens)
+ * Removing liquidity = CGT event (disposal of LP tokens for underlying tokens)
+ */
+function classifyLiquidityTransaction(
+  tx: any,
+  marketValueAUD: number,
+  acquisitionCostAUD: number,
+  holdingPeriodDays: number | null
+): ClassificationResult {
+  const capitalGain = marketValueAUD - acquisitionCostAUD;
+  const isDeposit = tx.tx_type.toLowerCase().includes('deposit') || tx.tx_type.toLowerCase().includes('add');
+
+  return {
+    type: 'CGT_EVENT',
+    subtype: isDeposit ? 'liquidity_deposit' : 'liquidity_withdrawal',
+    taxableAmountAUD: capitalGain,
+    isCGTDiscountEligible: holdingPeriodDays !== null && holdingPeriodDays > CGT_DISCOUNT_HOLDING_PERIOD_DAYS,
+    holdingPeriodDays,
+    rule: 'ATO DeFi guidance — providing liquidity involves disposal of underlying assets',
+    notes: isDeposit
+      ? `Adding liquidity is a CGT event. Disposal of underlying tokens for LP/receipt tokens. Gain: ${formatAUD(capitalGain)}.`
+      : `Removing liquidity is a CGT event. Disposal of LP/receipt tokens. Gain: ${formatAUD(capitalGain)}.`,
+  };
+}
+
+/**
+ * Perpetual/derivative trades (Drift Protocol)
+ * Opening position = not CGT event (posting collateral)
+ * Closing position with profit/loss = CGT event
+ * PnL settlement = CGT event
+ */
+function classifyPerpetualTrade(
+  tx: any,
+  marketValueAUD: number,
+  acquisitionCostAUD: number,
+  holdingPeriodDays: number | null
+): ClassificationResult {
+  const capitalGain = marketValueAUD - acquisitionCostAUD;
+
+  return {
+    type: 'CGT_EVENT',
+    subtype: 'perpetual_trade',
+    taxableAmountAUD: capitalGain,
+    isCGTDiscountEligible: false, // Short-term trading, typically held <12 months
+    holdingPeriodDays: holdingPeriodDays ?? 0,
+    rule: 'ATO — derivative/CFD-like arrangements are CGT events',
+    notes: `Perpetual trade PnL settlement. Capital gain: ${formatAUD(capitalGain)}. ${holdingPeriodDays !== null && holdingPeriodDays > CGT_DISCOUNT_HOLDING_PERIOD_DAYS ? '50% CGT discount may apply.' : 'No CGT discount (typically short-term trading).'}`,
   };
 }
 

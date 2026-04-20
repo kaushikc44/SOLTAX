@@ -8,6 +8,10 @@ dist/
 .next/
 out/
 build/
+tsconfig.tsbuildinfo
+
+# Generated reports / scratch
+WALLET_REPORT.md
 
 # Environment files
 .env

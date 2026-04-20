@@ -21,18 +21,14 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           'inline-flex items-center justify-center font-medium transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aus-green-500',
           'disabled:pointer-events-none disabled:opacity-50',
-          {
-            // Variants
-            'bg-aus-green-600 text-white hover:bg-aus-green-700': variant === 'primary',
-            'bg-aus-gold-500 text-white hover:bg-aus-gold-600': variant === 'secondary',
-            'border border-input bg-background hover:bg-accent text-foreground': variant === 'outline',
-            'hover:bg-accent text-foreground': variant === 'ghost',
-            'bg-red-600 text-white hover:bg-red-700': variant === 'destructive',
-            // Sizes
-            'h-9 px-3 text-sm rounded': size === 'sm',
-            'h-11 px-5 text-base rounded-md': size === 'md',
-            'h-13 px-8 text-lg rounded-lg': size === 'lg',
-          },
+          variant === 'primary' && 'bg-aus-green-600 text-white hover:bg-aus-green-700',
+          variant === 'secondary' && 'bg-aus-gold-500 text-white hover:bg-aus-gold-600',
+          variant === 'outline' && 'border border-input bg-background hover:bg-accent text-foreground',
+          variant === 'ghost' && 'hover:bg-accent text-foreground',
+          variant === 'destructive' && 'bg-red-600 text-white hover:bg-red-700',
+          size === 'sm' && 'h-9 px-3 text-sm rounded',
+          size === 'md' && 'h-11 px-5 text-base rounded-md',
+          size === 'lg' && 'h-13 px-8 text-lg rounded-lg',
           className
         )}
         ref={ref}

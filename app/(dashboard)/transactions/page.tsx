@@ -17,10 +17,10 @@ export default async function TransactionsPage() {
 
   // Fetch wallets and transactions
   const walletsResult = await getWallets(user.id);
-  const wallets = walletsResult.data || [];
+  const wallets: any[] = walletsResult.data || [];
 
   // Fetch transactions for all wallets
-  let allTransactions = [];
+  let allTransactions: any[] = [];
   for (const wallet of wallets) {
     const txResult = await getTransactions(wallet.id, { limit: 100 });
     allTransactions = [...allTransactions, ...(txResult.data || [])];

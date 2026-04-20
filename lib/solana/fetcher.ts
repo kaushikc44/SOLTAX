@@ -72,18 +72,40 @@ export interface FetchResult {
   totalFetched: number;
 }
 
-// Solana RPC connection
+// Solana RPC connection with multiple endpoints for rate limit handling
 let cachedConnection: Connection | null = null;
+
+// Public RPC endpoints (in priority order)
+const RPC_ENDPOINTS = [
+  process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
+  'https://solana-mainnet.g.alchemy.com/v2/demo', // Demo endpoint
+  'https://rpc.mainnet-beta.solana.com', // Fallback
+];
+
+let currentEndpointIndex = 0;
 
 export function getConnection(): Connection {
   if (!cachedConnection) {
-    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const rpcUrl = RPC_ENDPOINTS[currentEndpointIndex];
     cachedConnection = new Connection(rpcUrl, {
       commitment: 'confirmed',
       confirmTransactionInitialTimeout: 60000,
     });
   }
   return cachedConnection;
+}
+
+// Rate limiting state
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL = 100; // ms between requests
+
+export async function rateLimitedRequest(): Promise<void> {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest));
+  }
+  lastRequestTime = Date.now();
 }
 
 /**
@@ -102,31 +124,45 @@ export async function fetchAllSignatures(
   let currentBeforeSignature = beforeSignature;
   let hasMore = true;
 
-  while (hasMore) {
-    const signatures = await connection.getSignaturesForAddress(publicKey, {
-      limit: Math.min(limit, 1000),
-      before: currentBeforeSignature,
-    });
+  let retryCount = 0;
+  const MAX_RETRIES = 3;
 
-    if (signatures.length === 0) {
-      hasMore = false;
-      break;
-    }
+  while (hasMore && retryCount < MAX_RETRIES) {
+    try {
+      await rateLimitedRequest();
+      const signatures = await connection.getSignaturesForAddress(publicKey, {
+        limit: Math.min(limit, 1000),
+        before: currentBeforeSignature,
+      });
 
-    for (const sig of signatures) {
-      allSignatures.push(sig.signature);
-    }
+      if (signatures.length === 0) {
+        hasMore = false;
+        break;
+      }
 
-    // Check if we got fewer than requested - means we've reached the end
-    if (signatures.length < Math.min(limit, 1000)) {
-      hasMore = false;
-    } else {
-      currentBeforeSignature = signatures[signatures.length - 1].signature;
-    }
+      for (const sig of signatures) {
+        allSignatures.push(sig.signature);
+      }
 
-    // Rate limiting - wait between requests
-    if (hasMore) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Check if we got fewer than requested - means we've reached the end
+      if (signatures.length < Math.min(limit, 1000)) {
+        hasMore = false;
+      } else {
+        currentBeforeSignature = signatures[signatures.length - 1].signature;
+      }
+
+      // Rate limiting - wait between requests
+      if (hasMore) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+    } catch (error: any) {
+      if (error?.message?.includes('429') || error?.message?.includes('Too many requests')) {
+        retryCount++;
+        console.warn(`Rate limited while fetching signatures, retry ${retryCount}/${MAX_RETRIES}...`);
+        await new Promise(resolve => setTimeout(resolve, 3000 * retryCount)); // Exponential backoff
+      } else {
+        throw error;
+      }
     }
   }
 
@@ -135,11 +171,29 @@ export async function fetchAllSignatures(
 
 /**
  * Convert VersionedTransactionResponse to our RawTransaction format
+ * Handles both legacy and versioned transactions with Address Lookup Tables
  */
 function convertTransaction(tx: any): RawTransaction {
-  // Get all account keys from the message
-  const accountKeys = tx.transaction.message.getAccountKeys();
-  const allAccounts = accountKeys.keySegments().flat().map((key: any) => key.toString());
+  // Get all account keys - handle both resolved and unresolved ALTs
+  let allAccounts: string[] = [];
+
+  try {
+    // Try to get account keys (works if ALTs are resolved)
+    const accountKeys = tx.transaction.message.getAccountKeys();
+    allAccounts = accountKeys.keySegments().flat().map((key: any) => key.toString());
+  } catch (altError: any) {
+    // ALTs not resolved - use static accounts only
+    // This is a fallback for versioned transactions
+    const message = tx.transaction.message;
+    allAccounts = message.accountKeys?.map((k: any) => k.pubkey || k.toString()) || [];
+
+    // Try to get address table lookups and resolve them
+    if (message.addressTableLookups && message.addressTableLookups.length > 0) {
+      console.warn('Transaction uses Address Lookup Tables - some account data may be incomplete');
+      // For now, we'll work with static accounts
+      // A full fix would require fetching the lookup tables
+    }
+  }
 
   // Convert compiled instructions
   const instructions = tx.transaction.message.compiledInstructions.map((instr: any) => {
@@ -196,6 +250,7 @@ function convertTransaction(tx: any): RawTransaction {
 export async function fetchTransaction(
   signature: string
 ): Promise<RawTransaction | null> {
+  await rateLimitedRequest();
   const connection = getConnection();
 
   try {
@@ -209,7 +264,13 @@ export async function fetchTransaction(
     }
 
     return convertTransaction(tx);
-  } catch (error) {
+  } catch (error: any) {
+    // Handle rate limit errors
+    if (error?.message?.includes('429') || error?.message?.includes('Too many requests')) {
+      console.warn(`Rate limited for transaction ${signature}, waiting...`);
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+      return fetchTransaction(signature); // Retry
+    }
     console.error(`Failed to fetch transaction ${signature}:`, error);
     return null;
   }

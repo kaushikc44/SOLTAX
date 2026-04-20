@@ -1,5 +1,8 @@
 // SolTax AU - Header Component
+'use client';
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { signOut } from '@/lib/supabase/client';
 import { Wallet, FileText, Settings, LogOut, Menu } from 'lucide-react';
@@ -14,6 +17,14 @@ interface HeaderProps {
 }
 
 export function Header({ user, isMobileMenuOpen, onToggleMobileMenu }: HeaderProps) {
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/login');
+    router.refresh();
+  };
+
   const navigation = [
     { name: 'Wallets', href: '/wallets', icon: Wallet },
     { name: 'Transactions', href: '/transactions', icon: FileText },
@@ -70,7 +81,7 @@ export function Header({ user, isMobileMenuOpen, onToggleMobileMenu }: HeaderPro
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => signOut()}
+                onClick={handleSignOut}
                 className="hidden sm:inline-flex"
               >
                 <LogOut className="h-4 w-4 mr-2" />
@@ -119,7 +130,7 @@ export function Header({ user, isMobileMenuOpen, onToggleMobileMenu }: HeaderPro
             ))}
             {user && (
               <button
-                onClick={() => signOut()}
+                onClick={handleSignOut}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
               >
                 <LogOut className="h-5 w-5" />

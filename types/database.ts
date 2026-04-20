@@ -34,7 +34,22 @@ export interface transactions {
   ai_confidence: number | null;
   ai_explanation: string | null;
   is_spam: boolean;
+  market_value_aud: number | null;
+  acquisition_cost_aud: number | null;
+  protocol: string | null;
+  source: string | null;
   created_at: string;
+}
+
+export interface subscriptions {
+  id: string;
+  user_id: string;
+  tier: 'pro';
+  payment_tx_signature: string;
+  paid_amount_sol: string;
+  treasury_wallet: string;
+  activated_at: string;
+  expires_at: string | null;
 }
 
 export interface cost_basis_lots {
@@ -77,6 +92,7 @@ export interface price_cache {
   mint: string;
   price_aud: string;
   sourced_at: string;
+  sourced_date: string;
   source: string;
 }
 
@@ -113,6 +129,11 @@ export interface Database {
         Row: price_cache;
         Insert: Omit<price_cache, 'id'>;
         Update: Partial<Omit<price_cache, 'id'>>;
+      };
+      subscriptions: {
+        Row: subscriptions;
+        Insert: Omit<subscriptions, 'id' | 'activated_at'>;
+        Update: Partial<Omit<subscriptions, 'id' | 'activated_at'>>;
       };
     };
     Views: {};

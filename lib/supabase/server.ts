@@ -1,5 +1,10 @@
-// SolTax AU - Supabase Server Client
+// SolTax AU - Supabase Server Clients
+// - createClient(): anon key + cookies. Carries the logged-in user's session.
+// - createAdminClient(): service role key. Bypasses RLS. For server-only writes
+//   (transaction cache, price cache) that happen outside a user session.
+
 import { createServerClient } from '@supabase/ssr';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import type { Database } from '@/types/database';
 
@@ -7,35 +12,52 @@ export async function createClient() {
   const cookieStore = await cookies();
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl || !supabaseServiceKey) {
+  if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error(
-      'Missing Supabase environment variables. ' +
-      'Ensure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_KEY are set.'
+      'Missing Supabase env vars. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
     );
   }
 
-  return createServerClient<Database>(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
+  return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options);
           });
         } catch {
-          // Called from Server Component - cookies can't be set
+          // Called from a Server Component — cookies can't be mutated here.
+          // The middleware refreshes the session; ignore.
         }
       },
     },
   });
+}
+
+type AdminClient = ReturnType<typeof createSupabaseClient<Database>>;
+let adminSingleton: AdminClient | undefined;
+
+export function createAdminClient(): AdminClient {
+  if (adminSingleton) return adminSingleton;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error(
+      'Missing Supabase env vars. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_KEY.'
+    );
+  }
+
+  adminSingleton = createSupabaseClient<Database>(supabaseUrl, supabaseServiceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  return adminSingleton;
 }
 
 // Auth helpers for server components
@@ -52,15 +74,6 @@ export async function getSession() {
 }
 
 export async function isAuthenticated() {
-  const session = await getSession();
-  return session !== null;
-}
-
-// Protected route helper
-export async function requireAuth() {
-  const session = await getSession();
-  if (!session) {
-    throw new Error('Authentication required');
-  }
-  return session;
+  const user = await getCurrentUser();
+  return user !== null;
 }

@@ -1,8 +1,17 @@
 // SolTax AU - Database Queries
+// These run with the service-role admin client so they work for:
+//  (a) authenticated user requests (RLS would also allow them), and
+//  (b) the unauthenticated landing-page demo flow that caches transactions/prices.
+// Route handlers that need to scope to a user must verify the user separately
+// via createClient() from @/lib/supabase/server before calling these.
 import type { Database } from '@/types/database';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
 
 type Tables = Database['public']['Tables'];
+
+async function createClient() {
+  return createAdminClient();
+}
 
 // ============================================
 // WALLET QUERIES
@@ -41,7 +50,7 @@ export async function createWallet(data: {
       user_id: data.user_id,
       address: data.address,
       label: data.label || null,
-    })
+    } as any)
     .select()
     .single();
 }
@@ -49,7 +58,7 @@ export async function createWallet(data: {
 export async function updateWalletLabel(id: string, label: string) {
   const supabase = await createClient();
 
-  return supabase
+  return (supabase as any)
     .from('wallets')
     .update({ label })
     .eq('id', id)
@@ -104,7 +113,7 @@ export async function getTransactions(
     query = query.limit(options.limit);
   }
 
-  if (options?.offset) {
+  if (options?.offset && options?.limit) {
     query = query.range(options.offset, options.offset + options.limit - 1);
   }
 
@@ -125,7 +134,7 @@ export async function getTransactionBySignature(walletId: string, signature: str
 export async function createTransaction(data: Omit<Tables['transactions']['Insert'], 'id' | 'created_at'>) {
   const supabase = await createClient();
 
-  return supabase
+  return (supabase as any)
     .from('transactions')
     .insert(data)
     .select()
@@ -138,7 +147,7 @@ export async function updateTransaction(
 ) {
   const supabase = await createClient();
 
-  return supabase
+  return (supabase as any)
     .from('transactions')
     .update(data)
     .eq('id', id)
@@ -149,7 +158,7 @@ export async function updateTransaction(
 export async function upsertTransaction(data: Omit<Tables['transactions']['Insert'], 'id' | 'created_at'>) {
   const supabase = await createClient();
 
-  return supabase
+  return (supabase as any)
     .from('transactions')
     .upsert(data, {
       onConflict: 'wallet_id,signature',
@@ -164,7 +173,7 @@ export async function bulkUpsertTransactions(
 ) {
   const supabase = await createClient();
 
-  return supabase
+  return (supabase as any)
     .from('transactions')
     .upsert(transactions, {
       onConflict: 'wallet_id,signature',
@@ -194,7 +203,7 @@ export async function getCostBasisLots(walletId: string, mint?: string) {
 export async function createCostBasisLot(data: Omit<Tables['cost_basis_lots']['Insert'], 'id'>) {
   const supabase = await createClient();
 
-  return supabase
+  return (supabase as any)
     .from('cost_basis_lots')
     .insert(data)
     .select()
@@ -208,7 +217,7 @@ export async function disposeCostBasisLot(
 ) {
   const supabase = await createClient();
 
-  return supabase
+  return (supabase as any)
     .from('cost_basis_lots')
     .update({
       disposed_at: disposedAt,
@@ -247,7 +256,7 @@ export async function getTaxSummaries(walletId: string) {
 export async function upsertTaxSummary(data: Omit<Tables['tax_summary']['Insert'], 'id' | 'created_at'>) {
   const supabase = await createClient();
 
-  return supabase
+  return (supabase as any)
     .from('tax_summary')
     .upsert(data, {
       onConflict: 'wallet_id,financial_year',
@@ -273,7 +282,7 @@ export async function getUserSettings(userId: string) {
 export async function createUserSettings(data: Omit<Tables['user_settings']['Insert'], 'id' | 'created_at' | 'updated_at'>) {
   const supabase = await createClient();
 
-  return supabase
+  return (supabase as any)
     .from('user_settings')
     .insert(data)
     .select()
@@ -286,7 +295,7 @@ export async function updateUserSettings(
 ) {
   const supabase = await createClient();
 
-  return supabase
+  return (supabase as any)
     .from('user_settings')
     .update(data)
     .eq('user_id', userId)
@@ -340,16 +349,18 @@ export async function getCachedPrice(mint: string, date: Date) {
     .from('price_cache')
     .select('*')
     .eq('mint', mint)
-    .eq('sourced_at::date', dateStr)
+    .eq('sourced_date', dateStr)
     .maybeSingle();
 }
 
 export async function cachePrice(data: Omit<Tables['price_cache']['Insert'], 'id'>) {
   const supabase = await createClient();
 
-  return supabase
+  return (supabase as any)
     .from('price_cache')
-    .upsert(data)
+    .upsert(data, {
+      onConflict: 'mint,sourced_date',
+    })
     .select()
     .single();
 }

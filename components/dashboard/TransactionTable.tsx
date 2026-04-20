@@ -1,4 +1,6 @@
 // SolTax AU - Transaction Table Component
+'use client';
+
 import { useState } from 'react';
 import {
   Table,

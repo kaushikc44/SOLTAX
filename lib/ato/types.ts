@@ -17,5 +17,21 @@ export type {
 
 // Export constants and rules for convenience
 export * from './constants';
-export * from './rules';
-export * from './calculator';
+export {
+  classifyTransaction,
+  calculateCGT,
+  calculateTaxLiability,
+  isInFinancialYear,
+  getFinancialYear,
+  getFinancialYearRange,
+  formatAUD,
+  formatPercent,
+  formatHoldingPeriod,
+} from './rules';
+export {
+  calculateIncomeTax,
+  calculateMedicareLevy,
+  calculateCapitalGainsFIFO,
+  calculateTotalTax,
+  createCostBasisLot,
+} from './calculator';

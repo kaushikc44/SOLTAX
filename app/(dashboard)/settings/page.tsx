@@ -16,10 +16,10 @@ export default async function SettingsPage() {
   }
 
   const settingsResult = await getUserSettings(user.id);
-  const settings = settingsResult.data;
+  const settings: any = settingsResult.data;
 
   const walletsResult = await getWallets(user.id);
-  const wallets = walletsResult.data || [];
+  const wallets: any[] = walletsResult.data || [];
 
   return (
     <div className="space-y-6">

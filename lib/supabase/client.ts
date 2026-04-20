@@ -13,17 +13,11 @@ export function createClient() {
     );
   }
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-
-  return createBrowserClient<Database>(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      flowType: 'pkce',
-      redirectTo: `${origin}/auth/callback`,
-    },
-  });
+  // No custom auth options — @supabase/ssr's createBrowserClient handles
+  // cookie-based session storage on its own, and matches the server client
+  // defaults. Passing `flowType: 'pkce'` here was causing session storage
+  // mismatches with the server middleware.
+  return createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
 }
 
 // Email/Password Auth helpers

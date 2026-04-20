@@ -21,10 +21,11 @@ export default async function ReportsPage() {
   }
 
   const walletsResult = await getWallets(user.id);
-  const wallets = walletsResult.data || [];
+  const wallets: any[] = walletsResult.data || [];
+  const firstWalletId = wallets.length > 0 ? wallets[0].id : '';
 
-  const taxSummariesResult = await getTaxSummaries(wallets[0]?.id || '');
-  const taxSummaries = taxSummariesResult.data || [];
+  const taxSummariesResult = await getTaxSummaries(firstWalletId);
+  const taxSummaries: any[] = taxSummariesResult.data || [];
 
   return (
     <div className="space-y-6">

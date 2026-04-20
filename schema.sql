@@ -36,8 +36,26 @@ CREATE TABLE transactions (
     ai_confidence FLOAT,
     ai_explanation TEXT,
     is_spam BOOLEAN DEFAULT FALSE,
+    -- AUD values + protocol tagging populated by the Helius importer.
+    market_value_aud NUMERIC(18, 2),
+    acquisition_cost_aud NUMERIC(18, 2),
+    protocol VARCHAR(50),
+    source VARCHAR(50),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(wallet_id, signature)
+);
+
+-- One row per user once they've paid for Pro. Absence = free tier.
+CREATE TABLE subscriptions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
+    tier VARCHAR(20) NOT NULL DEFAULT 'pro',
+    payment_tx_signature VARCHAR(100) NOT NULL UNIQUE,
+    paid_amount_sol NUMERIC(18, 9) NOT NULL,
+    treasury_wallet VARCHAR(44) NOT NULL,
+    activated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ,
+    CHECK (tier IN ('pro'))
 );
 
 -- Cost basis lots for CGT calculations
@@ -85,9 +103,10 @@ CREATE TABLE price_cache (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     mint VARCHAR(44) NOT NULL,
     price_aud NUMERIC(18, 8) NOT NULL,
-    sourced_at TIMESTAMPTZ NOT NULL,
+    sourced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    sourced_date DATE NOT NULL DEFAULT (NOW()::date),
     source VARCHAR(20) DEFAULT 'coingecko',
-    UNIQUE(mint, sourced_at::date)
+    UNIQUE(mint, sourced_date)
 );
 
 -- ============================================
@@ -102,6 +121,7 @@ CREATE INDEX idx_cost_basis_lots_wallet_id ON cost_basis_lots(wallet_id);
 CREATE INDEX idx_cost_basis_lots_mint ON cost_basis_lots(mint);
 CREATE INDEX idx_tax_summary_wallet_year ON tax_summary(wallet_id, financial_year);
 CREATE INDEX idx_price_cache_mint_date ON price_cache(mint, sourced_at);
+CREATE INDEX idx_subscriptions_user_id ON subscriptions(user_id);
 
 -- ============================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
@@ -114,6 +134,7 @@ ALTER TABLE cost_basis_lots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tax_summary ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE price_cache ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 
 -- Wallets policies
 CREATE POLICY "Users can view their own wallets"
@@ -226,6 +247,17 @@ CREATE POLICY "Anyone can read price cache"
 
 CREATE POLICY "Service role can manage price cache"
     ON price_cache FOR ALL
+    TO service_role
+    USING (true);
+
+-- Subscription policies: users can read their own row; inserts/updates go
+-- through the service role (the verify endpoint) so payments can't be spoofed.
+CREATE POLICY "Users can view their own subscription"
+    ON subscriptions FOR SELECT
+    USING (auth.uid() = user_id);
+
+CREATE POLICY "Service role can manage subscriptions"
+    ON subscriptions FOR ALL
     TO service_role
     USING (true);
 

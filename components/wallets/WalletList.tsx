@@ -1,11 +1,13 @@
 // SolTax AU - Wallet List Component
+'use client';
+
 import { useState } from 'react';
 import { WalletCard } from '@/components/dashboard/WalletCard';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { WalletForm } from './WalletForm';
 import type { Wallet } from '@/types';
-import { Plus } from 'lucide-react';
+import { Plus, RefreshCw } from 'lucide-react';
 
 interface WalletListProps {
   wallets: (Wallet & {
@@ -16,6 +18,8 @@ interface WalletListProps {
   onViewWallet?: (wallet: Wallet) => void;
   onDeleteWallet?: (walletId: string) => void;
   isLoading?: boolean;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export function WalletList({
@@ -24,6 +28,8 @@ export function WalletList({
   onViewWallet,
   onDeleteWallet,
   isLoading,
+  onRefresh,
+  isRefreshing = false,
 }: WalletListProps) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -42,7 +48,20 @@ export function WalletList({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Your Wallets</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Your Wallets</h2>
+          {onRefresh && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="h-8 w-8 p-0"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </Button>
+          )}
+        </div>
         <Button onClick={() => setIsAddModalOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Add Wallet

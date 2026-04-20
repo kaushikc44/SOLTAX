@@ -287,7 +287,8 @@ export function createCostBasisLot(
   acquiredAt: Date,
   amount: number,
   costBasisAUD: number,
-  method: 'FIFO' | 'LIFO' | 'SPECIFIC' = 'FIFO'
+  method: 'FIFO' | 'LIFO' | 'SPECIFIC' = 'FIFO',
+  walletId?: string
 ): Omit<CostBasisLot, 'id'> {
   return {
     mint,
@@ -297,7 +298,8 @@ export function createCostBasisLot(
     method,
     disposed_at: null,
     proceeds_aud: null,
-  };
+    wallet_id: walletId || '',
+  } as any;
 }
 
 /**

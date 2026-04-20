@@ -1,6 +1,6 @@
 // SolTax AU - Dashboard Layout
-import { getCurrentUser } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { getCurrentUser } from '@/lib/supabase/server';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 
@@ -11,7 +11,8 @@ export default async function DashboardLayout({
 }) {
   const user = await getCurrentUser();
 
-  // Redirect to login if not authenticated
+  // Middleware already redirects unauthenticated users, but double-check here
+  // so Server Components downstream can rely on `user` being defined.
   if (!user) {
     redirect('/login?redirect=/dashboard');
   }

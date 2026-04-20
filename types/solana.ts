@@ -87,7 +87,6 @@ export type TokenSymbol =
 
 export const TOKEN_SYMBOLS: Record<string, TokenSymbol> = {
   [COMMON_TOKENS.SOL]: 'SOL',
-  [COMMON_TOKENS.WSOL]: 'WSOL',
   [COMMON_TOKENS.USDC]: 'USDC',
   [COMMON_TOKENS.USDT]: 'USDT',
   [COMMON_TOKENS.BONK]: 'BONK',

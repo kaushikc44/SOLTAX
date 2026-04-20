@@ -19,6 +19,7 @@ interface Transaction {
   signature: string;
   block_time: string;
   type: string;
+  protocol?: string;
   description: string;
   audIn?: number;
   audOut?: number;
@@ -238,6 +239,7 @@ export function TransactionTable({
               <TableRow>
                 <TableHead className="w-[120px]">Date</TableHead>
                 <TableHead className="w-[100px]">Type</TableHead>
+                <TableHead className="w-[100px]">Protocol</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right">AUD In</TableHead>
                 <TableHead className="text-right">AUD Out</TableHead>
@@ -258,6 +260,15 @@ export function TransactionTable({
                     </TableCell>
                     <TableCell>
                       <span className="text-xs font-medium uppercase">{tx.type}</span>
+                    </TableCell>
+                    <TableCell>
+                      {tx.protocol ? (
+                        <span className="text-xs font-medium px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                          {tx.protocol}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="max-w-[200px] truncate">
                       {tx.description}
@@ -308,7 +319,7 @@ export function TransactionTable({
                   {/* Expanded Row */}
                   {expandedRow === tx.id && (
                     <TableRow>
-                      <TableCell colSpan={7} className="bg-gray-50 dark:bg-gray-900 p-4">
+                      <TableCell className="bg-gray-50 dark:bg-gray-900 p-4" colSpan={7}>
                         <div className="space-y-3">
                           <div className="flex items-center gap-2">
                             <FileText className="h-4 w-4 text-gray-500" />

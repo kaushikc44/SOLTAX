@@ -1,12 +1,6 @@
 // SolTax AU - PDF Report Generation using pdf-lib
-import {
-  PDFDocument,
-  StandardFonts,
-  rgb,
-  RGB,
-  degrees,
-} from 'pdf-lib';
-import type { TaxReport, TaxCalculationResult, CapitalGain } from '@/types';
+import { PDFDocument, StandardFonts, rgb, RGB } from 'pdf-lib';
+import type { TaxReport } from '@/types';
 
 // ============================================
 // COLORS
@@ -30,26 +24,20 @@ export async function generateTaxReportPDF(report: TaxReport): Promise<Uint8Arra
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  // Create pages
-  const coverPage = pdfDoc.addPage([595, 842]); // A4
+  // Cover + summary
+  const coverPage = pdfDoc.addPage([595, 842]);
   const summaryPage = pdfDoc.addPage([595, 842]);
-
-  // Generate cover page
   drawCoverPage(coverPage, report, font, boldFont);
-
-  // Generate summary page
   drawSummaryPage(summaryPage, report, font, boldFont);
 
-  // Add transaction details page if needed
+  // Transactions (paginated)
   if (report.transactions.length > 0) {
-    const transactionsPage = pdfDoc.addPage([595, 842]);
-    drawTransactionsPage(transactionsPage, report, font, boldFont);
+    drawTransactionsPages(pdfDoc, report, font, boldFont);
   }
 
-  // Add capital gains schedule
+  // CGT schedule (paginated)
   if (report.capitalGains.length > 0) {
-    const cgtPage = pdfDoc.addPage([595, 842]);
-    drawCGTSchedulePage(cgtPage, report, font, boldFont);
+    drawCGTSchedulePages(pdfDoc, report, font, boldFont);
   }
 
   return pdfDoc.save();
@@ -183,10 +171,8 @@ function drawSummaryPage(
   font: any,
   boldFont: any
 ) {
-  const { width } = page.getSize();
   let y = 780;
 
-  // Title
   page.drawText('Tax Summary', {
     x: 50,
     y,
@@ -199,7 +185,6 @@ function drawSummaryPage(
 
   const summary = report.summary;
 
-  // Income section
   page.drawText('ASSESSABLE INCOME', {
     x: 50,
     y,
@@ -207,20 +192,14 @@ function drawSummaryPage(
     font: boldFont,
     color: COLORS.dark,
   });
-
   y -= 25;
 
-  drawSummaryRow(page, 'Staking Rewards', 0, font); // Would need actual data
-  y -= 20;
-  drawSummaryRow(page, 'Airdrops', 0, font);
-  y -= 20;
-  drawSummaryRow(page, 'Other Income', summary.totalIncome, font);
-  y -= 20;
-  drawSummaryRow(page, 'Total Income', summary.totalIncome, font, true);
+  y = drawSummaryRow(page, y, 'Staking Rewards', 0, font);
+  y = drawSummaryRow(page, y, 'Airdrops', 0, font);
+  y = drawSummaryRow(page, y, 'Other Income', summary.totalIncome, font);
+  y = drawSummaryRow(page, y, 'Total Income', summary.totalIncome, boldFont, { bold: true });
+  y -= 15;
 
-  y -= 30;
-
-  // Capital Gains section
   page.drawText('CAPITAL GAINS', {
     x: 50,
     y,
@@ -228,22 +207,22 @@ function drawSummaryPage(
     font: boldFont,
     color: COLORS.dark,
   });
-
   y -= 25;
 
-  drawSummaryRow(page, 'Gross Capital Gains', summary.totalCapitalGains, font);
-  y -= 20;
-  drawSummaryRow(page, 'Capital Losses', -summary.totalCapitalLosses, font, true);
-  y -= 20;
-  drawSummaryRow(page, 'Net Capital Gain', summary.netCapitalGain, font);
-  y -= 20;
-  drawSummaryRow(page, 'CGT Discount (50%)', -summary.cgtDiscountApplied, font, true);
-  y -= 20;
-  drawSummaryRow(page, 'Discounted Net Gain', summary.netCapitalGain - summary.cgtDiscountApplied, font, true);
+  y = drawSummaryRow(page, y, 'Gross Capital Gains', summary.totalCapitalGains, font);
+  y = drawSummaryRow(page, y, 'Capital Losses', -summary.totalCapitalLosses, font);
+  y = drawSummaryRow(page, y, 'Net Capital Gain', summary.netCapitalGain, font);
+  y = drawSummaryRow(page, y, 'CGT Discount (50%)', -summary.cgtDiscountApplied, font);
+  y = drawSummaryRow(
+    page,
+    y,
+    'Discounted Net Gain',
+    summary.netCapitalGain - summary.cgtDiscountApplied,
+    boldFont,
+    { bold: true }
+  );
+  y -= 15;
 
-  y -= 30;
-
-  // Taxable Income
   page.drawText('TAXABLE INCOME', {
     x: 50,
     y,
@@ -251,13 +230,12 @@ function drawSummaryPage(
     font: boldFont,
     color: COLORS.primary,
   });
-
   y -= 25;
-  drawSummaryRow(page, 'Total Taxable Income', summary.taxableIncome, font, true);
+  y = drawSummaryRow(page, y, 'Total Taxable Income', summary.taxableIncome, boldFont, {
+    bold: true,
+  });
+  y -= 15;
 
-  y -= 30;
-
-  // Tax Calculation
   page.drawText('ESTIMATED TAX', {
     x: 50,
     y,
@@ -265,251 +243,204 @@ function drawSummaryPage(
     font: boldFont,
     color: COLORS.dark,
   });
-
   y -= 25;
-  drawSummaryRow(page, 'Income Tax', summary.estimatedTax, font);
-  y -= 20;
-  drawSummaryRow(page, 'Medicare Levy (2%)', summary.medicareLevy, font);
-  y -= 20;
-  drawSummaryRow(page, 'TOTAL TAX PAYABLE', summary.totalTax, font, true, COLORS.primary);
+
+  y = drawSummaryRow(page, y, 'Income Tax', summary.estimatedTax, font);
+  y = drawSummaryRow(page, y, 'Medicare Levy (2%)', summary.medicareLevy, font);
+  drawSummaryRow(page, y, 'TOTAL TAX PAYABLE', summary.totalTax, boldFont, {
+    bold: true,
+    color: COLORS.primary,
+  });
 }
 
 function drawSummaryRow(
   page: any,
+  y: number,
   label: string,
   amount: number,
   font: any,
-  isBold = false,
-  color?: RGB
-) {
-  const fontToUse = isBold ? font : font;
+  opts: { bold?: boolean; color?: RGB } = {}
+): number {
+  const color = opts.color || COLORS.dark;
+
   page.drawText(label, {
     x: 50,
-    y: page.getSize().height - 50, // This is wrong, need to track y properly
+    y,
     size: 11,
-    font: fontToUse,
-    color: color || COLORS.dark,
+    font,
+    color,
   });
 
-  page.drawText(formatAUD(amount), {
-    x: 450,
-    y: page.getSize().height - 50,
+  const amountStr = formatAUD(amount);
+  const textWidth = font.widthOfTextAtSize(amountStr, 11);
+  page.drawText(amountStr, {
+    x: 545 - textWidth,
+    y,
     size: 11,
-    font: fontToUse,
-    color: color || COLORS.dark,
-    align: 'right',
+    font,
+    color,
   });
+
+  return y - 20;
 }
 
 // ============================================
 // TRANSACTIONS PAGE
 // ============================================
 
-function drawTransactionsPage(
-  page: any,
+function drawTransactionsPages(
+  pdfDoc: PDFDocument,
   report: TaxReport,
   font: any,
   boldFont: any
 ) {
-  const { width } = page.getSize();
-  let y = 780;
+  const ROW_HEIGHT = 16;
+  const TOP_Y = 760;
+  const BOTTOM_Y = 60;
+  const ROWS_PER_PAGE = Math.floor((TOP_Y - 60 - BOTTOM_Y) / ROW_HEIGHT);
 
-  page.drawText('Transaction History', {
-    x: 50,
-    y,
-    size: 20,
-    font: boldFont,
-    color: COLORS.primary,
-  });
+  const chunks: typeof report.transactions[] = [];
+  for (let i = 0; i < report.transactions.length; i += ROWS_PER_PAGE) {
+    chunks.push(report.transactions.slice(i, i + ROWS_PER_PAGE));
+  }
 
-  y -= 50;
+  chunks.forEach((chunk, pageIdx) => {
+    const page = pdfDoc.addPage([595, 842]);
+    const { width } = page.getSize();
+    let y = TOP_Y;
 
-  // Table header
-  const headers = ['Date', 'Type', 'Details', 'AUD Value'];
-  const colWidths = [100, 120, 250, 100];
-  let x = 50;
+    page.drawText(
+      `Transaction History${chunks.length > 1 ? ` (page ${pageIdx + 1}/${chunks.length})` : ''}`,
+      { x: 50, y, size: 20, font: boldFont, color: COLORS.primary }
+    );
+    y -= 40;
 
-  for (let i = 0; i < headers.length; i++) {
-    page.drawText(headers[i], {
-      x,
-      y,
-      size: 10,
-      font: boldFont,
+    const headers = ['Date', 'Type', 'Protocol', 'AUD In', 'AUD Out', 'Signature'];
+    const xs = [50, 130, 220, 320, 410, 500];
+    headers.forEach((h, i) =>
+      page.drawText(h, { x: xs[i], y, size: 9, font: boldFont, color: COLORS.dark })
+    );
+    y -= 15;
+
+    page.drawLine({
+      start: { x: 50, y },
+      end: { x: width - 50, y },
       color: COLORS.dark,
+      thickness: 1,
     });
-    x += colWidths[i];
-  }
+    y -= 15;
 
-  y -= 20;
+    for (const tx of chunk) {
+      const txType = (tx.ato_classification as any)?.type || tx.tx_type || 'Unknown';
+      const protocol = tx.protocol || '—';
+      const audIn = (tx.market_value_aud || 0).toFixed(2);
+      const audOut = (tx.acquisition_cost_aud || 0).toFixed(2);
+      const signature = tx.signature?.slice(0, 10) || 'N/A';
 
-  // Draw separator line
-  page.drawLine({
-    start: { x: 50, y },
-    end: { x: width - 50, y },
-    color: COLORS.dark,
-    thickness: 1,
+      page.drawText(new Date(tx.block_time).toLocaleDateString('en-AU'), {
+        x: xs[0], y, size: 8, font,
+      });
+      page.drawText(String(txType).slice(0, 12), { x: xs[1], y, size: 8, font });
+      page.drawText(String(protocol).slice(0, 12), {
+        x: xs[2], y, size: 8, font, color: COLORS.primary,
+      });
+      page.drawText(`$${audIn}`, { x: xs[3], y, size: 8, font, color: COLORS.green });
+      page.drawText(`$${audOut}`, { x: xs[4], y, size: 8, font, color: COLORS.red });
+      page.drawText(`${signature}...`, { x: xs[5], y, size: 8, font });
+
+      y -= ROW_HEIGHT;
+    }
+
+    if (pageIdx === chunks.length - 1) {
+      page.drawText('Full transaction details at https://solscan.io/tx/[signature]', {
+        x: 50,
+        y: Math.max(y - 10, 40),
+        size: 8,
+        font,
+        color: rgb(0.5, 0.5, 0.5),
+      });
+    }
   });
-
-  y -= 15;
-
-  // Transaction rows (limited for demo)
-  const transactions = report.transactions.slice(0, 15);
-
-  for (const tx of transactions) {
-    if (y < 50) break; // Don't overflow page
-
-    const txType = (tx.ato_classification as any)?.type || 'Unknown';
-
-    page.drawText(new Date(tx.block_time).toLocaleDateString('en-AU'), {
-      x: 50,
-      y,
-      size: 9,
-      font,
-    });
-
-    page.drawText(txType, {
-      x: 160,
-      y,
-      size: 9,
-      font,
-    });
-
-    const details = `${tx.token_in_mint?.slice(0, 8) || 'N/A'} → ${tx.token_out_mint?.slice(0, 8) || 'N/A'}`;
-    page.drawText(details, {
-      x: 290,
-      y,
-      size: 9,
-      font,
-    });
-
-    y -= 20;
-  }
 }
 
 // ============================================
 // CGT SCHEDULE PAGE
 // ============================================
 
-function drawCGTSchedulePage(
-  page: any,
+function drawCGTSchedulePages(
+  pdfDoc: PDFDocument,
   report: TaxReport,
   font: any,
   boldFont: any
 ) {
-  const { width } = page.getSize();
-  let y = 780;
+  const ROW_HEIGHT = 18;
+  const TOP_Y = 780;
+  const FIRST_ROW_Y = TOP_Y - 100;
+  const BOTTOM_Y = 60;
+  const ROWS_PER_PAGE = Math.floor((FIRST_ROW_Y - BOTTOM_Y) / ROW_HEIGHT);
 
-  page.drawText('Capital Gains Tax Schedule', {
-    x: 50,
-    y,
-    size: 20,
-    font: boldFont,
-    color: COLORS.primary,
-  });
+  const chunks: typeof report.capitalGains[] = [];
+  for (let i = 0; i < report.capitalGains.length; i += ROWS_PER_PAGE) {
+    chunks.push(report.capitalGains.slice(i, i + ROWS_PER_PAGE));
+  }
 
-  y -= 50;
+  chunks.forEach((chunk, pageIdx) => {
+    const page = pdfDoc.addPage([595, 842]);
+    const { width } = page.getSize();
+    let y = TOP_Y;
 
-  page.drawText('This schedule details all CGT events for the financial year.', {
-    x: 50,
-    y,
-    size: 11,
-    font,
-    color: rgb(0.5, 0.5, 0.5),
-  });
+    page.drawText(
+      `Capital Gains Tax Schedule${
+        chunks.length > 1 ? ` (page ${pageIdx + 1}/${chunks.length})` : ''
+      }`,
+      { x: 50, y, size: 20, font: boldFont, color: COLORS.primary }
+    );
+    y -= 50;
 
-  y -= 35;
+    page.drawText('This schedule details all CGT events for the financial year.', {
+      x: 50, y, size: 11, font, color: rgb(0.5, 0.5, 0.5),
+    });
+    y -= 35;
 
-  // Table header
-  const headers = ['Asset', 'Acquired', 'Disposed', 'Cost Basis', 'Proceeds', 'Gain/Loss'];
-  const colWidths = [100, 80, 80, 90, 90, 100];
-  let x = 50;
+    const headers = ['Asset', 'Acquired', 'Disposed', 'Cost Basis', 'Proceeds', 'Gain/Loss'];
+    const xs = [50, 160, 250, 340, 440, 540];
+    headers.forEach((h, i) =>
+      page.drawText(h, { x: xs[i], y, size: 9, font: boldFont, color: COLORS.dark })
+    );
+    y -= 20;
 
-  for (let i = 0; i < headers.length; i++) {
-    page.drawText(headers[i], {
-      x,
-      y,
-      size: 9,
-      font: boldFont,
+    page.drawLine({
+      start: { x: 50, y },
+      end: { x: width - 50, y },
       color: COLORS.dark,
+      thickness: 1,
     });
-    x += colWidths[i];
-  }
+    y -= 15;
 
-  y -= 20;
-
-  // Draw separator line
-  page.drawLine({
-    start: { x: 50, y },
-    end: { x: width - 50, y },
-    color: COLORS.dark,
-    thickness: 1,
+    for (const gain of chunk) {
+      page.drawText(gain.asset.slice(0, 8) + '...', { x: xs[0], y, size: 8, font });
+      page.drawText(gain.acquiredAt.toLocaleDateString('en-AU'), { x: xs[1], y, size: 8, font });
+      page.drawText(gain.disposedAt.toLocaleDateString('en-AU'), { x: xs[2], y, size: 8, font });
+      page.drawText(formatAUD(gain.costBasis), { x: xs[3], y, size: 8, font });
+      page.drawText(formatAUD(gain.proceeds), { x: xs[4], y, size: 8, font });
+      page.drawText(formatAUD(gain.gain), {
+        x: xs[5], y, size: 8, font,
+        color: gain.gain >= 0 ? COLORS.green : COLORS.red,
+      });
+      y -= ROW_HEIGHT;
+    }
   });
-
-  y -= 15;
-
-  // CGT rows
-  for (const gain of report.capitalGains) {
-    if (y < 50) break;
-
-    page.drawText(gain.asset.slice(0, 8) + '...', {
-      x: 50,
-      y,
-      size: 8,
-      font,
-    });
-
-    page.drawText(gain.acquiredAt.toLocaleDateString('en-AU'), {
-      x: 160,
-      y,
-      size: 8,
-      font,
-    });
-
-    page.drawText(gain.disposedAt.toLocaleDateString('en-AU'), {
-      x: 250,
-      y,
-      size: 8,
-      font,
-    });
-
-    page.drawText(formatAUD(gain.costBasis), {
-      x: 340,
-      y,
-      size: 8,
-      font,
-    });
-
-    page.drawText(formatAUD(gain.proceeds), {
-      x: 440,
-      y,
-      size: 8,
-      font,
-    });
-
-    const gainColor = gain.gain >= 0 ? COLORS.green : COLORS.red;
-    page.drawText(formatAUD(gain.gain), {
-      x: 540,
-      y,
-      size: 8,
-      font,
-      color: gainColor,
-    });
-
-    y -= 18;
-  }
 }
 
 // ============================================
 // HELPERS
 // ============================================
 
-function formatAUD(amount: number): string {
+export function formatAUD(amount: number): string {
   return new Intl.NumberFormat('en-AU', {
     style: 'currency',
     currency: 'AUD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(amount);
-}
-
-export function formatAUD(amount: number): string {
-  return formatAUD(amount);
 }
