@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { signUpWithEmail } from '@/lib/supabase/client';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, ArrowRight } from 'lucide-react';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -71,14 +72,31 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4 py-12">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 px-4 py-12">
+      <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+        <ThemeToggle />
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 rounded-full bg-aus-green-600 px-4 py-2 text-sm font-medium text-white shadow-md ring-1 ring-black/5 transition-all hover:bg-aus-green-700 hover:shadow-lg hover:-translate-y-0.5"
+        >
+          Try without account
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-4xl w-full">
         {/* Benefits Side */}
         <div className="hidden lg:flex flex-col justify-center space-y-6">
           <div>
-            <div className="h-12 w-12 rounded-lg bg-aus-green-600 flex items-center justify-center mb-4">
-              <span className="text-white font-bold text-xl">S</span>
-            </div>
+            <img
+              src="/logo-dark.svg"
+              alt="TaxMate"
+              className="h-14 w-auto mb-6 dark:hidden"
+            />
+            <img
+              src="/logo.svg"
+              alt="TaxMate"
+              className="h-14 w-auto mb-6 hidden dark:block"
+            />
             <h1 className="text-3xl font-bold mb-2">
               Create your account
             </h1>
@@ -100,9 +118,13 @@ export default function SignupPage() {
         {/* Form Side */}
         <Card>
           <CardHeader>
+            <div className="lg:hidden flex justify-center mb-3">
+              <img src="/logo-dark.svg" alt="TaxMate" className="h-10 w-auto dark:hidden" />
+              <img src="/logo.svg" alt="TaxMate" className="h-10 w-auto hidden dark:block" />
+            </div>
             <CardTitle>Sign Up</CardTitle>
             <CardDescription>
-              Create your SolTax AU account
+              Create your TaxMate account
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -156,6 +178,13 @@ export default function SignupPage() {
               Already have an account?{' '}
               <Link href="/login" className="text-aus-green-600 hover:underline font-medium">
                 Sign in
+              </Link>
+            </p>
+
+            <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+              Just want to check a wallet?{' '}
+              <Link href="/" className="underline hover:text-gray-900 dark:hover:text-white">
+                Continue without account
               </Link>
             </p>
           </CardContent>

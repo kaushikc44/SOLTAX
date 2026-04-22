@@ -10,7 +10,17 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Australian theme - green and gold accents
+        // TaxMate brand palette — Solana green + purple on dark bg.
+        brand: {
+          green: '#14F195',
+          'green-dark': '#0fc278',
+          purple: '#9945FF',
+          'purple-dark': '#7a34d9',
+          bg: '#0a0f14',
+          'bg-soft': '#111822',
+        },
+        // Australian forest-green accent scale. Brighter Solana-green still
+        // available via `bg-brand-green` for logo/accent surfaces.
         aus: {
           green: {
             50: '#f0f7f4',

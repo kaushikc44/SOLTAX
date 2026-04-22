@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getUserSettings } from '@/lib/db/queries';
 import { getWallets } from '@/lib/db/queries';
-import { User, Bell, Shield, CreditCard, Trash2 } from 'lucide-react';
+import { User, Shield, CreditCard, Trash2 } from 'lucide-react';
+import { TaxSettingsForm } from '@/components/settings/SettingsForms';
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
@@ -63,56 +64,15 @@ export default async function SettingsPage() {
           </div>
           <CardDescription>Configure your tax calculation preferences</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5">
-                Marginal Tax Rate
-              </label>
-              <select
-                defaultValue={settings?.marginal_tax_rate || '32.5'}
-                className="w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-              >
-                <option value="0">0%</option>
-                <option value="19">19%</option>
-                <option value="32.5">32.5%</option>
-                <option value="37">37%</option>
-                <option value="45">45%</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5">
-                Tax Resident Country
-              </label>
-              <select
-                defaultValue={settings?.tax_resident_country || 'AU'}
-                className="w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-              >
-                <option value="AU">Australia</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <label className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                defaultChecked={settings?.apply_medicare_levy !== false}
-                className="h-4 w-4 rounded border-gray-300"
-              />
-              <span className="text-sm">Apply Medicare Levy (2%)</span>
-            </label>
-            <label className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                defaultChecked={settings?.cgt_discount_eligible !== false}
-                className="h-4 w-4 rounded border-gray-300"
-              />
-              <span className="text-sm">Eligible for 50% CGT Discount</span>
-            </label>
-          </div>
-
-          <Button>Save Tax Settings</Button>
+        <CardContent>
+          <TaxSettingsForm
+            initial={{
+              marginal_tax_rate: settings?.marginal_tax_rate ?? 32.5,
+              tax_resident_country: settings?.tax_resident_country ?? 'AU',
+              apply_medicare_levy: settings?.apply_medicare_levy !== false,
+              cgt_discount_eligible: settings?.cgt_discount_eligible !== false,
+            }}
+          />
         </CardContent>
       </Card>
 

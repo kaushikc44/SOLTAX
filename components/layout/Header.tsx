@@ -1,26 +1,28 @@
-// SolTax AU - Header Component
+// TaxMate - Header Component
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { signOut } from '@/lib/supabase/client';
-import { Wallet, FileText, Settings, LogOut, Menu } from 'lucide-react';
+import { Wallet, FileText, BarChart3, Settings, LogOut, Menu, X } from 'lucide-react';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 interface HeaderProps {
   user?: {
     email?: string | null;
     avatar?: string | null;
   };
-  isMobileMenuOpen?: boolean;
-  onToggleMobileMenu?: () => void;
 }
 
-export function Header({ user, isMobileMenuOpen, onToggleMobileMenu }: HeaderProps) {
+export function Header({ user }: HeaderProps) {
   const router = useRouter();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
+    setIsMobileMenuOpen(false);
     router.push('/login');
     router.refresh();
   };
@@ -28,7 +30,7 @@ export function Header({ user, isMobileMenuOpen, onToggleMobileMenu }: HeaderPro
   const navigation = [
     { name: 'Wallets', href: '/wallets', icon: Wallet },
     { name: 'Transactions', href: '/transactions', icon: FileText },
-    { name: 'Reports', href: '/reports', icon: FileText },
+    { name: 'Reports', href: '/reports', icon: BarChart3 },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
 
@@ -36,11 +38,9 @@ export function Header({ user, isMobileMenuOpen, onToggleMobileMenu }: HeaderPro
     <header className="sticky top-0 z-40 w-full border-b bg-white/95 dark:bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
       <div className="container flex h-16 items-center justify-between px-4">
         {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-aus-green-600 flex items-center justify-center">
-            <span className="text-white font-bold text-lg">S</span>
-          </div>
-          <span className="font-bold text-xl hidden sm:inline-block">SolTax AU</span>
+        <Link href="/dashboard" className="flex items-center">
+          <img src="/logo-dark.svg" alt="TaxMate" className="h-8 w-auto dark:hidden" />
+          <img src="/logo.svg" alt="TaxMate" className="h-8 w-auto hidden dark:block" />
         </Link>
 
         {/* Desktop Navigation */}
@@ -57,7 +57,8 @@ export function Header({ user, isMobileMenuOpen, onToggleMobileMenu }: HeaderPro
         </nav>
 
         {/* User Menu */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
           {user ? (
             <>
               <div className="hidden sm:flex items-center gap-2">
@@ -105,11 +106,12 @@ export function Header({ user, isMobileMenuOpen, onToggleMobileMenu }: HeaderPro
 
           {/* Mobile Menu Button */}
           <button
-            onClick={onToggleMobileMenu}
+            onClick={() => setIsMobileMenuOpen((v) => !v)}
             className="md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-            aria-label="Toggle menu"
+            aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={isMobileMenuOpen}
           >
-            <Menu className="h-5 w-5" />
+            {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
       </div>
@@ -122,6 +124,7 @@ export function Header({ user, isMobileMenuOpen, onToggleMobileMenu }: HeaderPro
               <Link
                 key={item.name}
                 href={item.href}
+                onClick={() => setIsMobileMenuOpen(false)}
                 className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 transition-colors"
               >
                 <item.icon className="h-5 w-5" />

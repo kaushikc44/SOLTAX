@@ -67,6 +67,63 @@ export interface TaxLiabilityResult {
 }
 
 // ============================================
+// SPAM DETECTION
+// ============================================
+
+/**
+ * Heuristic spam detection. Runs before classification so obvious dust/spam
+ * tokens are filtered out of tax numbers.
+ *
+ * Conservative — we only flag when we're fairly sure. False positives here
+ * would hide real transactions from the user's report.
+ */
+export function isLikelySpam(tx: {
+  tx_type?: string;
+  token_in_mint?: string | null;
+  token_in_amount?: string | null;
+  token_out_mint?: string | null;
+  token_out_amount?: string | null;
+  market_value_aud?: number | null;
+  acquisition_cost_aud?: number | null;
+  is_spam?: boolean | null;
+  source?: string | null;
+}): boolean {
+  if (tx.is_spam) return true;
+
+  const type = (tx.tx_type || '').toLowerCase();
+  const marketValue = Number(tx.market_value_aud || 0);
+  const acquisitionCost = Number(tx.acquisition_cost_aud || 0);
+
+  // Known Solana mints that are never spam, even if pricing failed.
+  const SAFE_MINTS = new Set([
+    'So11111111111111111111111111111111111111112', // SOL
+    'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+    'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
+  ]);
+  if (tx.token_in_mint && SAFE_MINTS.has(tx.token_in_mint)) return false;
+  if (tx.token_out_mint && SAFE_MINTS.has(tx.token_out_mint)) return false;
+
+  // 1. Unsolicited airdrops of sub-cent tokens — classic spam.
+  if (type === 'airdrop' && marketValue < 0.01) return true;
+
+  // 2. Incoming transfers of unknown mints with zero AUD value — dust drops.
+  //    Must be one-sided (we received something, sent nothing).
+  const hasIncoming = !!(tx.token_out_mint && Number(tx.token_out_amount) > 0);
+  const hasOutgoing = !!(tx.token_in_mint && Number(tx.token_in_amount) > 0);
+  if ((type === 'transfer' || type === 'unknown' || type === '') && hasIncoming && !hasOutgoing) {
+    if (marketValue === 0 && acquisitionCost === 0) return true;
+  }
+
+  // 3. Transactions with absolutely no AUD values and no recognised type —
+  //    almost certainly unparseable dust.
+  if (type && marketValue === 0 && acquisitionCost === 0 && type === 'unknown') {
+    return true;
+  }
+
+  return false;
+}
+
+// ============================================
 // CLASSIFICATION FUNCTION
 // ============================================
 

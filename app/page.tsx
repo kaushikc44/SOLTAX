@@ -1,12 +1,15 @@
 // SolTax AU - Main Page (Real wallet analysis)
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { signOut } from '@/lib/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Wallet, ArrowRight, Mail, Download, CheckCircle, LayoutDashboard } from 'lucide-react';
+import { Wallet, ArrowRight, Mail, Download, CheckCircle, LayoutDashboard, LogOut } from 'lucide-react';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 interface AnalysisResult {
   balanceSol: number;
@@ -19,6 +22,7 @@ interface AnalysisResult {
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const [walletAddress, setWalletAddress] = useState('');
   const [email, setEmail] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -26,6 +30,20 @@ export default function HomePage() {
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState('');
+  const [authUser, setAuthUser] = useState<{ email: string | null } | null | undefined>(undefined);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((data) => setAuthUser(data.user ?? null))
+      .catch(() => setAuthUser(null));
+  }, []);
+
+  const handleSignOut = async () => {
+    await signOut();
+    setAuthUser(null);
+    router.refresh();
+  };
 
   const handleAnalyze = async () => {
     if (!walletAddress.trim()) return;
@@ -209,24 +227,43 @@ export default function HomePage() {
       {/* Header */}
       <header className="border-b bg-white/95 dark:bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
         <div className="container flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-aus-green-600 flex items-center justify-center">
-              <span className="text-white font-bold text-lg">S</span>
-            </div>
-            <span className="text-xl font-bold">SolTax AU</span>
-          </div>
-          <nav className="flex items-center gap-4 md:gap-6">
+          <Link href="/" className="flex items-center">
+            <img src="/logo-dark.svg" alt="TaxMate" className="h-8 w-auto dark:hidden" />
+            <img src="/logo.svg" alt="TaxMate" className="h-8 w-auto hidden dark:block" />
+          </Link>
+          <nav className="flex items-center gap-3 md:gap-6">
             <a href="#how-it-works" className="hidden md:inline text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400">How It Works</a>
             <a href="#features" className="hidden md:inline text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400">Features</a>
-            <Link href="/login">
-              <Button variant="outline" size="sm">Sign In</Button>
-            </Link>
-            <Link href="/signup" className="hidden sm:block">
-              <Button size="sm">
-                Get Started
-                <ArrowRight className="h-4 w-4 ml-1" />
-              </Button>
-            </Link>
+            <ThemeToggle />
+            {authUser === undefined ? (
+              // Avoid flicker during the initial auth check.
+              <div className="h-8 w-20 rounded-md bg-gray-100 dark:bg-gray-800 animate-pulse" />
+            ) : authUser ? (
+              <>
+                <Link href="/dashboard">
+                  <Button size="sm">
+                    <LayoutDashboard className="h-4 w-4 mr-1" />
+                    Dashboard
+                  </Button>
+                </Link>
+                <Button variant="outline" size="sm" onClick={handleSignOut}>
+                  <LogOut className="h-4 w-4 mr-1" />
+                  Sign Out
+                </Button>
+              </>
+            ) : (
+              <>
+                <Link href="/login">
+                  <Button variant="outline" size="sm">Sign In</Button>
+                </Link>
+                <Link href="/signup" className="hidden sm:block">
+                  <Button size="sm">
+                    Get Started
+                    <ArrowRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </Link>
+              </>
+            )}
           </nav>
         </div>
       </header>
@@ -234,6 +271,18 @@ export default function HomePage() {
       {/* Hero Section */}
       <main className="container px-4 py-16 mx-auto">
         <div className="text-center mb-12">
+          <div className="flex justify-center mb-8">
+            <img
+              src="/logo-dark.svg"
+              alt="TaxMate"
+              className="h-20 md:h-24 w-auto dark:hidden"
+            />
+            <img
+              src="/logo.svg"
+              alt="TaxMate"
+              className="h-20 md:h-24 w-auto hidden dark:block"
+            />
+          </div>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
             Australian Solana Tax Engine
           </h1>
@@ -242,18 +291,29 @@ export default function HomePage() {
             AI-powered classification for swaps, staking rewards, and more.
           </p>
           <div className="flex items-center justify-center gap-3">
-            <Link href="/signup">
-              <Button size="lg">
-                Create free account
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-            <Link href="/dashboard">
-              <Button size="lg" variant="outline">
-                <LayoutDashboard className="h-4 w-4 mr-2" />
-                Go to dashboard
-              </Button>
-            </Link>
+            {authUser ? (
+              <Link href="/dashboard">
+                <Button size="lg">
+                  <LayoutDashboard className="h-4 w-4 mr-2" />
+                  Open dashboard
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            ) : (
+              <>
+                <Link href="/signup">
+                  <Button size="lg">
+                    Create free account
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </Link>
+                <Link href="/login">
+                  <Button size="lg" variant="outline">
+                    Sign in
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
 
@@ -537,7 +597,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="border-t mt-20">
         <div className="container px-4 py-8 mx-auto text-center text-sm text-gray-600 dark:text-gray-400">
-          <p>SolTax AU - Australian Solana Tax Engine</p>
+          <p>TaxMate — Australian Solana Tax Engine</p>
           <p className="mt-2">
             This tool provides general guidance only. Consult a registered tax agent for personal advice.
           </p>

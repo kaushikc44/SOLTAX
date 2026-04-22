@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import { ThemeProvider } from '@/components/theme-provider';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -9,23 +10,29 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'SolTax AU - Australian Solana Tax Engine',
-  description: 'AI-powered Solana tax engine for Australian investors. Generate ATO-compliant tax reports with ease.',
-  keywords: ['Solana', 'tax', 'Australia', 'ATO', 'crypto', 'cryptocurrency', 'CGT', 'blockchain'],
-  authors: [{ name: 'SolTax AU' }],
-  creator: 'SolTax AU',
+  title: 'TaxMate — Solana crypto tax for Australian investors',
+  description:
+    'TaxMate generates ATO-compliant tax reports from any Solana wallet. AI-powered classification for swaps, staking, airdrops and more.',
+  keywords: ['TaxMate', 'Solana', 'tax', 'Australia', 'ATO', 'crypto', 'cryptocurrency', 'CGT', 'blockchain'],
+  authors: [{ name: 'TaxMate' }],
+  creator: 'TaxMate',
+  icons: {
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+    shortcut: ['/favicon.svg'],
+  },
   openGraph: {
     type: 'website',
     locale: 'en_AU',
-    siteName: 'SolTax AU',
-    title: 'SolTax AU - Australian Solana Tax Engine',
-    description: 'AI-powered Solana tax engine for Australian investors. Generate ATO-compliant tax reports with ease.',
+    siteName: 'TaxMate',
+    title: 'TaxMate — Solana crypto tax for Australian investors',
+    description:
+      'TaxMate generates ATO-compliant tax reports from any Solana wallet.',
     countryName: 'Australia',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'SolTax AU - Australian Solana Tax Engine',
-    description: 'AI-powered Solana tax engine for Australian investors.',
+    title: 'TaxMate — Solana crypto tax for Australian investors',
+    description: 'ATO-compliant tax reports from any Solana wallet.',
   },
   robots: {
     index: true,
@@ -41,7 +48,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

@@ -210,6 +210,14 @@ export async function createCostBasisLot(data: Omit<Tables['cost_basis_lots']['I
     .single();
 }
 
+export async function bulkInsertCostBasisLots(
+  lots: Array<Omit<Tables['cost_basis_lots']['Insert'], 'id'>>
+) {
+  if (lots.length === 0) return { data: [], error: null };
+  const supabase = await createClient();
+  return (supabase as any).from('cost_basis_lots').insert(lots);
+}
+
 export async function disposeCostBasisLot(
   lotId: string,
   disposedAt: string,

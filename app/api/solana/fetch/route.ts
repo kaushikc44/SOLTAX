@@ -1,14 +1,23 @@
-// SolTax AU - API: Fetch Solana Transactions using Helius
+// TaxMate - API: Fetch Solana Transactions using Helius
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchTransactions, heliusToTransaction } from '@/lib/solana/helius';
-import { classifyTransaction } from '@/lib/ato/rules';
-import { bulkUpsertTransactions, getTransactions } from '@/lib/db/queries';
+import { classifyTransaction, isLikelySpam } from '@/lib/ato/rules';
+import {
+  bulkUpsertTransactions,
+  getTransactions,
+  bulkInsertCostBasisLots,
+} from '@/lib/db/queries';
 import { getHistoricalPrice, calculateAUDValue, isKnownMint } from '@/lib/pricing';
+import { createClient } from '@/lib/supabase/server';
+
+function isUUID(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { walletAddress, limit = 50, useCache = true } = body;
+    const { walletAddress, walletId: providedWalletId, limit = 50, useCache = true } = body;
 
     if (!walletAddress) {
       return NextResponse.json(
@@ -17,8 +26,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate a deterministic walletId for demo mode
-    const walletId = `demo_${walletAddress.slice(0, 8)}`;
+    // If the caller passed a real wallets.id (UUID), verify the user owns it
+    // and use it — this unlocks cost_basis_lots persistence. Otherwise fall
+    // back to the demo_ prefix used by the unauthenticated landing flow.
+    let walletId: string;
+    let isRealWallet = false;
+    if (providedWalletId && isUUID(providedWalletId)) {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      walletId = providedWalletId;
+      isRealWallet = true;
+    } else {
+      walletId = `demo_${walletAddress.slice(0, 8)}`;
+    }
 
     // Try to get cached transactions from Supabase first
     if (useCache) {
@@ -109,6 +132,17 @@ export async function POST(request: NextRequest) {
         marketValueAUD = acquisitionCostAUD;
       }
 
+      const spam = isLikelySpam({
+        tx_type: data.tx_type,
+        token_in_mint: data.token_in_mint,
+        token_in_amount: data.token_in_amount,
+        token_out_mint: data.token_out_mint,
+        token_out_amount: data.token_out_amount,
+        market_value_aud: marketValueAUD,
+        acquisition_cost_aud: acquisitionCostAUD,
+        is_spam: data.is_spam,
+      });
+
       const classification = classifyTransaction({
         tx_type: data.tx_type,
         token_in_mint: data.token_in_mint,
@@ -116,7 +150,7 @@ export async function POST(request: NextRequest) {
         token_in_amount: data.token_in_amount,
         token_out_amount: data.token_out_amount,
         block_time: data.block_time,
-        is_spam: data.is_spam,
+        is_spam: spam,
         market_value_aud: marketValueAUD,
         acquisition_cost_aud: acquisitionCostAUD,
         holding_period_days: null,
@@ -138,7 +172,7 @@ export async function POST(request: NextRequest) {
         ato_classification: classification,
         ai_confidence: classification.type === 'NEEDS_REVIEW' ? 0.5 : 0.9,
         ai_explanation: classification.notes,
-        is_spam: data.is_spam,
+        is_spam: spam,
         source: data.source || 'helius',
         protocol: data.protocol,
       };
@@ -149,6 +183,38 @@ export async function POST(request: NextRequest) {
       await bulkUpsertTransactions(processedTransactions as any);
     } catch (dbError) {
       console.warn('Failed to cache transactions in Supabase:', dbError);
+    }
+
+    // For real wallets, persist acquisitions as cost_basis_lots so the report
+    // generator can FIFO-match disposals later. Skip for demo/landing flow and
+    // for spam or zero-value incoming transfers.
+    if (isRealWallet) {
+      const lots = processedTransactions
+        .filter((tx) => {
+          if (tx.is_spam) return false;
+          const type = (tx.tx_type || '').toLowerCase();
+          if (type === 'transfer') return false; // no CGT event
+          if (!tx.token_out_mint || !tx.token_out_amount) return false;
+          return (tx.market_value_aud ?? 0) > 0;
+        })
+        .map((tx) => ({
+          wallet_id: walletId,
+          mint: tx.token_out_mint as string,
+          acquired_at: tx.block_time,
+          amount: tx.token_out_amount as string,
+          cost_basis_aud: String(tx.market_value_aud ?? 0),
+          method: 'FIFO' as const,
+          disposed_at: null,
+          proceeds_aud: null,
+        }));
+
+      if (lots.length > 0) {
+        try {
+          await bulkInsertCostBasisLots(lots as any);
+        } catch (lotErr) {
+          console.warn('Failed to insert cost basis lots:', lotErr);
+        }
+      }
     }
 
     return NextResponse.json({

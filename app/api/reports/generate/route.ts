@@ -1,11 +1,10 @@
-// SolTax AU - API: Generate Tax Report
+// TaxMate - API: Generate Tax Report
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateTaxReportPDF } from '@/lib/reports/pdf';
-import { exportTransactionsCSV, exportCapitalGainsCSV } from '@/lib/reports/csv';
-import { getTransactions, getTaxSummary, getCostBasisLots } from '@/lib/db/queries';
-import { calculateCapitalGainsFIFO, calculateTotalTax } from '@/lib/ato/calculator';
-import { getFinancialYearRange } from '@/lib/ato/constants';
+import { getTransactions, getCostBasisLots } from '@/lib/db/queries';
+import { getFinancialYearRange } from '@/lib/ato/rules';
+import { computeReport } from '@/lib/reports/calculate';
 
 export async function POST(request: NextRequest) {
   try {
@@ -100,61 +99,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get cost basis lots
-    const { data: lots } = await getCostBasisLots(walletId);
+    // Load cost basis lots and FIFO-match disposals against them.
+    const lotsResult = await getCostBasisLots(walletId);
+    const lots = (lotsResult.data || []) as any[];
 
-    // Calculate capital gains
-    const disposals = (transactions as any[])
-      .filter((tx) => {
-        const classification = tx.ato_classification as any;
-        return classification?.type === 'disposal' || classification?.type === 'swap';
-      })
-      .map((tx) => ({
-        mint: tx.token_in_mint || 'unknown',
-        amount: parseFloat(tx.token_in_amount || '0'),
-        proceedsAUD: 0,
-        disposalDate: new Date(tx.block_time),
-      }));
-
-    const { gains, totalGains, totalLosses, netGain } = calculateCapitalGainsFIFO(
-      lots || [],
-      disposals
-    );
-
-    // Calculate income
-    const incomeTransactions = (transactions as any[]).filter((tx) => {
-      const classification = tx.ato_classification as any;
-      return classification?.type === 'income';
-    });
-
-    const totalIncome = incomeTransactions.reduce((sum, tx) => sum, 0);
-
-    // Calculate tax
-    const taxResult = calculateTotalTax({
-      taxableIncome: totalIncome,
-      capitalGains: totalGains,
-      capitalLosses: totalLosses,
-      cgtDiscountEligible: true,
+    const report = computeReport(transactions as any[], lots as any[], {
       applyMedicareLevy: true,
+      cgtDiscountEligible: true,
     });
 
-    // Generate report
+    const incomeTransactions = (transactions as any[]).filter((_tx, i) => {
+      const c = report.classifications[i];
+      return c?.type === 'ORDINARY_INCOME';
+    });
+
     if (format === 'pdf') {
       const pdfBytes = await generateTaxReportPDF({
         walletId,
         walletLabel: walletData?.label,
         financialYear,
         generatedAt: new Date(),
-        summary: taxResult,
+        summary: {
+          financialYear,
+          totalIncome: report.ordinaryIncome,
+          totalCapitalGains: report.totalCapitalGains,
+          totalCapitalLosses: report.totalCapitalLosses,
+          netCapitalGain: report.netCapitalGain,
+          cgtDiscountApplied: report.cgtDiscountApplied,
+          taxableIncome: report.ordinaryIncome + report.netCapitalGain,
+          estimatedTax: report.tax.incomeTax + report.tax.cgtTax,
+          medicareLevy: report.tax.medicareLevy,
+          totalTax: report.tax.totalTax,
+        } as any,
         transactions,
-        capitalGains: gains,
+        capitalGains: report.gains,
         incomeTransactions,
       });
 
       return new NextResponse(Buffer.from(pdfBytes), {
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="soltax-fy${financialYear}.pdf"`,
+          'Content-Disposition': `attachment; filename="taxmate-fy${financialYear}.pdf"`,
         },
       });
     }
